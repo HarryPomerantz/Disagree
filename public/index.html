@@ -4,14 +4,13 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>DisagreeWithMe.org</title>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="styles.css">
+    <link rel="stylesheet" href="/styles.css">
 </head>
 <body>
     <div id="app">
         <header>
             <h1 id="home-link">DisagreeWithMe<span class="dot-org">.org</span></h1>
-            <p class="tagline">Two Must Imagine Sisyphus Arguing with the Rock - Albert Camus</p>
+            <p class="tagline">"One Must Imagine Sisyphus Arguing with the Rock" - Albert Camus</p>
         </header>
 
         <div id="auth-view" class="view">
@@ -24,6 +23,7 @@
                         <button type="submit">Login</button>
                     </form>
                 </div>
+
                 <div class="auth-form signup-form">
                     <h2>Sign Up</h2>
                     <form id="signup-form">
@@ -36,39 +36,27 @@
             </div>
         </div>
 
-        <div id="value-identification-view" class="view hidden">
-            <h2>Discover Your Core Values</h2>
-            <div id="ai-message"></div>
-            <form id="value-identification-form">
-                <textarea id="value-answer" placeholder="Type your response here..." required></textarea>
-                <button type="submit" id="value-submit">Send</button>
-            </form>
-        </div>
-
         <div id="home-view" class="view hidden">
             <button id="logout-button">Logout</button>
 
             <div class="content-wrapper">
-                <div class="side-column left-column">
-                    <div id="user-dashboard" class="dashboard-container">
-                        <h2>User Dashboard</h2>
-                        <div id="activity-summary"></div>
-                        <button id="retake-assessment" class="hidden">Retake Value Assessment</button>
-                    </div>
-                </div>
-
                 <div class="main-column">
                     <div class="topic-container">
                         <h2>Choose a Topic</h2>
                         <div id="topic-bubbles"></div>
-                        <button id="find-match" disabled>Find Someone to Enlighten</button>
+                        <button id="find-match" class="btn primary-btn" disabled>Find Someone to Enlighten</button>
+                    </div>
+
+                    <div class="upgrade-value-system">
+                        <h2>Upgrade Your Value System</h2>
+                        <button id="start-assessment" class="btn primary-btn">Start Assessment</button>
                     </div>
                 </div>
 
-                <div class="side-column right-column">
+                <div class="side-column">
                     <div class="news-container">
-                        <h2>Real News Feed</h2>
-                        <div id="news-feed"></div>
+                        <h2>Latest News</h2>
+                        <div id="news-container"></div>
                     </div>
                 </div>
             </div>
@@ -76,44 +64,33 @@
 
         <div id="chat-view" class="view hidden">
             <div class="chat-container">
-                <div class="sidebar">
-                    <h3>Chat Options</h3>
-                    <button id="report-btn">Report</button>
-                    <button id="fact-checker-btn">Fact Checker</button>
-                </div>
-
                 <div class="chat-main" role="main">
-                    <div id="echo-chamber-warning" class="hidden">
-                        <p>Echo Chamber Escape Hatch</p>
-                        <p>WARNING! You are agreeing with each other. That is not what this country is all about. Click to abort.</p>
-                        <button id="abort-agreement">Abort Agreement</button>
-                    </div>
-
                     <div id="chat-messages"></div>
-
                     <div class="input-area">
                         <textarea id="message-input" placeholder="Type your message..."></textarea>
-                        <button id="send-message">Send</button>
+                        <button id="send-message" class="btn primary-btn">Send</button>
                     </div>
-                </div>
-
-                <div class="end-chat-buttons">
-                    <button id="end-chat-agree" class="end-chat-btn agree-btn">I agree. End Chat.</button>
-                    <button id="end-chat-crazy" class="end-chat-btn crazy-btn">This person is crazy. End Chat.</button>
                 </div>
             </div>
         </div>
 
-        <div id="opening-statement-popup" class="popup-overlay hidden">
-            <div class="popup-content">
-                <h2>Write your opening statement</h2>
-                <textarea id="opening-statement" placeholder="Enter your opening statement..."></textarea>
-                <button id="start-chat">Start Chat</button>
+        <div id="ai-chat-view" class="view hidden">
+            <div class="chat-container">
+                <div class="chat-main" role="main">
+                    <div id="ai-chat-messages"></div>
+                    <div class="progress-container">
+                        <div id="progress-bar" class="progress-bar"></div>
+                    </div>
+                    <div class="input-area">
+                        <textarea id="ai-message-input" placeholder="Type your message..."></textarea>
+                        <button id="ai-send-message" class="btn primary-btn">Send</button>
+                    </div>
+                </div>
             </div>
         </div>
     </div>
 
     <script src="/socket.io/socket.io.js"></script>
-    <script src="script.js"></script>
+    <script src="/script.js"></script>
 </body>
 </html>

@@ -17,10 +17,8 @@ const app = express();
 const server = http.createServer(app);
 const io = socketIo(server);
 
-// Apply Helmet middleware for security headers
 app.use(helmet());
 
-// Rate limiting
 const limiter = rateLimit({
     windowMs: 15 * 60 * 1000,
     max: 100
@@ -41,6 +39,8 @@ const publicPath = path.join(__dirname, 'public');
 app.use(express.static(publicPath));
 app.use(express.json());
 
+let waitingUsers = {};
+
 async function connectToDatabase() {
     try {
         await mongoose.connect(process.env.MONGODB_URI, {
@@ -54,7 +54,6 @@ async function connectToDatabase() {
     }
 }
 
-// User registration
 app.post('/api/register', async (req, res) => {
     try {
         const { username, email, password } = req.body;
@@ -84,30 +83,25 @@ app.post('/api/register', async (req, res) => {
             username,
             email,
             password: hashedPassword,
-            valueIdentificationCompleted: false
+            isNewUser: true
         });
 
         await user.save();
-console.log ("User Saved ", user)
 
-        const token = jwt.sign({ userId: user._id }, process.env.JWT_SECRET, { expiresIn: '1h' });
-        res.status(201).json({ 
-            token, 
-            userId: user._id, 
-            username: user.username, 
-            valueIdentificationCompleted: false,
-            message: 'User registered successfully. Please complete the value identification process.' 
-        });
+        res.status(201).json({ message: 'User registered successfully. Please log in to start your value system assessment.' });
     } catch (error) {
         console.error('Registration error:', error);
-        res.status(500).json({ message: 'Server error during registration' });
+        res.status(500).json({ message: 'Server error' });
     }
 });
 
-// User login
 app.post('/api/login', async (req, res) => {
     try {
         const { email, password } = req.body;
+
+        if (!email || !password) {
+            return res.status(400).json({ message: 'Email and password are required' });
+        }
 
         const user = await User.findOne({ email });
         if (!user) {
@@ -124,79 +118,74 @@ app.post('/api/login', async (req, res) => {
             token, 
             userId: user._id, 
             username: user.username,
-            valueIdentificationCompleted: user.valueIdentificationCompleted
+            isNewUser: user.isNewUser
         });
     } catch (error) {
         console.error('Login error:', error);
-        res.status(500).json({ message: 'Server error during login' });
+        res.status(500).json({ message: 'Server error' });
     }
 });
 
-// Protected route to get user data
-app.get('/api/user', authMiddleware, async (req, res) => {
+app.post('/ai-chat', authMiddleware, async (req, res) => {
+    const { message } = req.body;
     try {
-        const user = await User.findById(req.userId).select('-password');
-        if (!user) {
-            return res.status(404).json({ message: 'User not found' });
+        if (!openai) {
+            throw new Error('OpenAI client not initialized');
         }
-        res.json(user);
-    } catch (error) {
-        console.error('Error fetching user data:', error);
-        res.status(500).json({ message: 'Server error while fetching user data' });
-    }
-});
-
-// Value Identification
-app.post('/api/value-identification', authMiddleware, async (req, res) => {
-    try {
-        const { userId } = req;
-        const { message, isComplete } = req.body;
-
+        const userId = req.user;
         const user = await User.findById(userId);
-        if (!user) {
-            return res.status(404).json({ message: 'User not found' });
+        
+        const aiResponse = await generateAIResponse(message, user);
+        
+        // Update user's chat progress
+        user.chatProgress += 1;
+        if (user.chatProgress >= 5) {
+            user.isNewUser = false;
         }
+        await user.save();
 
+        res.json({ 
+            response: aiResponse, 
+            progress: Math.min(user.chatProgress * 20, 100),
+            chatComplete: user.chatProgress >= 5
+        });
+    } catch (error) {
+        console.error("Error in AI chat:", error);
+        res.status(500).json({ 
+            error: "An error occurred while processing your request.",
+            details: error.message
+        });
+    }
+});
+
+async function generateAIResponse(message, user) {
+    try {
         const completion = await openai.chat.completions.create({
             model: "gpt-3.5-turbo",
             messages: [
-                { 
-                    role: "system", 
-                    content: "You are an AI designed to help identify a person's core values through conversation. Ask thought-provoking questions and provide insightful follow-ups. After about 5-7 exchanges, summarize the person's core values."
-                },
-                { role: "user", content: message }
-            ]
+                {"role": "system", "content": "You are an AI designed to assess a user's value system through natural conversation. Ask probing questions about their beliefs and opinions on various topics. Be engaging and avoid repetition. This is message " + (user.chatProgress + 1) + " of the conversation."},
+                {"role": "user", "content": message}
+            ],
+            max_tokens: 150
         });
 
-        const aiResponse = completion.choices[0].message.content;
-
-        if (isComplete) {
-            user.identifiedValues = aiResponse;
-            user.valueIdentificationCompleted = true;
-            await user.save();
-            res.json({ message: 'Value identification completed', values: aiResponse, completed: true });
-        } else {
-            res.json({ message: aiResponse, completed: false });
-        }
+        return completion.choices[0].message.content;
     } catch (error) {
-        console.error('Error in value identification:', error);
-        res.status(500).json({ message: 'Error during value identification process' });
+        console.error("Error generating AI response:", error);
+        throw error;
     }
-});
+}
 
-// Fetch News Articles
 app.get('/api/news', authMiddleware, async (req, res) => {
     try {
         const response = await axios.get(`https://newsapi.org/v2/top-headlines?country=us&apiKey=${process.env.NEWS_API_KEY}`);
-        const articles = response.data.articles;
-        res.json(articles);
+        res.json(response.data.articles.slice(0, 5));
     } catch (error) {
         console.error('Error fetching news:', error);
-        res.status(500).json({ message: 'Error fetching news articles' });
+        res.status(500).json({ message: 'Error fetching news' });
     }
 });
 
-// Socket.io setup
 io.use((socket, next) => {
     const token = socket.handshake.auth.token;
     if (!token) {
@@ -213,20 +202,43 @@ io.on('connection', (socket) => {
     console.log('New user connected:', socket.userId);
 
     socket.on('find match', (topic) => {
-        // Implement match-making logic here
+        console.log(`User ${socket.userId} looking for match on topic: ${topic}`);
+        if (waitingUsers[topic]) {
+            const partnerSocket = waitingUsers[topic];
+            const room = `room_${Date.now()}`;
+
+            socket.join(room);
+            partnerSocket.join(room);
+
+            io.to(room).emit('match found', { room, topic });
+            console.log(`Match found for topic: ${topic}`);
+
+            delete waitingUsers[topic];
+        } else {
+            waitingUsers[topic] = socket;
+            console.log(`User ${socket.userId} waiting for match on topic: ${topic}`);
+        }
     });
 
     socket.on('send message', (data) => {
+        console.log(`Message sent in room: ${data.room}`);
         socket.to(data.room).emit('new message', data.message);
     });
 
-    socket.on('report user', (data) => {
-        socket.to(data.room).emit('user reported');
-    });
-
     socket.on('disconnect', () => {
+        for (let topic in waitingUsers) {
+            if (waitingUsers[topic] === socket) {
+                delete waitingUsers[topic];
+                console.log(`Waiting user ${socket.userId} removed from topic: ${topic}`);
+                break;
+            }
+        }
         console.log('User disconnected:', socket.userId);
     });
+});
+
+app.get('*', (req, res) => {
+    res.sendFile(path.join(publicPath, 'index.html'));
 });
 
 async function startServer() {
@@ -239,4 +251,3 @@ async function startServer() {
 }
 
 startServer();
-

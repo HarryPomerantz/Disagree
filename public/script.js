@@ -4,33 +4,25 @@ const socket = io({
     }
 });
 
-// DOM Elements
 const authView = document.getElementById('auth-view');
-const valueIdentificationView = document.getElementById('value-identification-view');
 const homeView = document.getElementById('home-view');
 const chatView = document.getElementById('chat-view');
+const aiChatView = document.getElementById('ai-chat-view');
 const topicBubblesContainer = document.getElementById('topic-bubbles');
 const findMatchButton = document.getElementById('find-match');
 const chatMessages = document.getElementById('chat-messages');
 const messageInput = document.getElementById('message-input');
 const sendMessageButton = document.getElementById('send-message');
-const echoChamberWarning = document.getElementById('echo-chamber-warning');
-const abortAgreementButton = document.getElementById('abort-agreement');
 const homeLink = document.getElementById('home-link');
-const newsFeed = document.getElementById('news-feed');
-const reportButton = document.getElementById('report-btn');
-const factCheckerButton = document.getElementById('fact-checker-btn');
-const openingStatementPopup = document.getElementById('opening-statement-popup');
-const openingStatementTextarea = document.getElementById('opening-statement');
-const startChatButton = document.getElementById('start-chat');
 const loginForm = document.getElementById('login-form');
 const signupForm = document.getElementById('signup-form');
 const logoutButton = document.getElementById('logout-button');
-const retakeAssessmentButton = document.getElementById('retake-assessment');
+const aiMessageInput = document.getElementById('ai-message-input');
+const aiSendMessageButton = document.getElementById('ai-send-message');
+const progressBar = document.getElementById('progress-bar');
 
 let currentRoom = null;
 let currentTopic = null;
-let valueIdentificationMessages = [];
 
 const topics = [
     'Donald Trump', 'Democrats', 'Republicans', 'Flat-Earth', 'Abortion', 'Religion',
@@ -59,60 +51,16 @@ function selectTopic(topic, bubbleElement) {
     findMatchButton.disabled = false;
 }
 
-function startValueIdentification() {
-    authView.classList.add('hidden');
-    valueIdentificationView.classList.remove('hidden');
-    homeView.classList.add('hidden');
-    document.getElementById('ai-message').textContent = "Hello! I'm here to help identify your core values. Let's start with a simple question: What's most important to you in life?";
-}
-
-document.getElementById('value-identification-form').addEventListener('submit', async (e) => {
-    e.preventDefault();
-    const userMessage = document.getElementById('value-answer').value;
-    document.getElementById('value-answer').value = '';
-    
-    valueIdentificationMessages.push({ role: "user", content: userMessage });
-    
-    try {
-        const response = await fetch('/api/value-identification', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'x-auth-token': localStorage.getItem('token')
-            },
-            body: JSON.stringify({ 
-                message: userMessage, 
-                isComplete: valueIdentificationMessages.length >= 10 
-            })
-        });
-        const data = await response.json();
-        
-        if (data.completed) {
-            completeValueIdentification(data.values);
-        } else {
-            document.getElementById('ai-message').textContent = data.message;
-            valueIdentificationMessages.push({ role: "assistant", content: data.message });
-        }
-    } catch (error) {
-        console.error('Error in value identification:', error);
-        alert('An error occurred. Please try again.');
+findMatchButton.addEventListener('click', () => {
+    if (!currentTopic) {
+        alert('Please select a topic. How else will you know what to be irrationally angry about?');
+        return;
     }
+    socket.emit('find match', currentTopic);
+    homeView.classList.add('hidden');
+    chatView.classList.remove('hidden');
+    addChatMessage('system', `Searching for someone who's wrong about ${currentTopic}... This shouldn't take long.`);
 });
-
-function completeValueIdentification(values) {
-    valueIdentificationView.classList.add('hidden');
-    homeView.classList.remove('hidden');
-    updateDashboard(values);
-}
-
-function updateDashboard(values) {
-    const activitySummary = document.getElementById('activity-summary');
-    activitySummary.innerHTML = `
-        <h3>Your Identified Values:</h3>
-        <p>${values}</p>
-    `;
-    retakeAssessmentButton.classList.remove('hidden');
-}
 
 function sendMessage() {
     let message = messageInput.value.trim();
@@ -120,7 +68,6 @@ function sendMessage() {
         socket.emit('send message', { room: currentRoom, message: message });
         addChatMessage('you', message);
         messageInput.value = '';
-        checkForAgreement(message);
     }
 }
 
@@ -154,113 +101,118 @@ function addChatMessage(sender, message) {
     chatMessages.scrollTop = chatMessages.scrollHeight;
 }
 
-function checkForAgreement(message) {
-    if (message.toLowerCase().includes('i agree')) {
-        echoChamberWarning.classList.remove('hidden');
-    }
-}
-
 homeLink.addEventListener('click', () => {
     if (isAuthenticated()) {
         homeView.classList.remove('hidden');
         chatView.classList.add('hidden');
-        valueIdentificationView.classList.add('hidden');
+        aiChatView.classList.add('hidden');
     } else {
         authView.classList.remove('hidden');
         homeView.classList.add('hidden');
         chatView.classList.add('hidden');
-        valueIdentificationView.classList.add('hidden');
+        aiChatView.classList.add('hidden');
     }
 });
 
-findMatchButton.addEventListener('click', () => {
-    if (!currentTopic) {
-        alert('Please select a topic. How else will you know what to be irrationally angry about?');
-        return;
-    }
-    openingStatementPopup.classList.remove('hidden');
-});
+async function sendAiMessage() {
+    const message = aiMessageInput.value.trim();
+    if (message) {
+        addAiChatMessage('you', message);
+        aiMessageInput.value = '';
 
-startChatButton.addEventListener('click', () => {
-    const openingStatement = openingStatementTextarea.value.trim();
-    if (openingStatement) {
-        socket.emit('find match', currentTopic);
-        openingStatementPopup.classList.add('hidden');
-        homeView.classList.add('hidden');
-        chatView.classList.remove('hidden');
-        addChatMessage('system', `Searching for someone who's wrong about ${currentTopic}... This shouldn't take long.`);
-    } else {
-        alert('Please write an opening statement before starting the chat.');
-    }
-});
-
-reportButton.addEventListener('click', () => {
-    socket.emit('report user', { room: currentRoom });
-    alert("The other person has been sent to argue with a wall.");
-});
-
-factCheckerButton.addEventListener('click', async () => {
-    const selectedMessage = prompt("Please paste the message you want to fact-check:");
-    if (selectedMessage) {
         try {
-            const response = await fetch('/fact-check', {
+            const response = await fetchWithAuth('/ai-chat', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
-                    'x-auth-token': getToken()
                 },
-                body: JSON.stringify({ message: selectedMessage }),
+                body: JSON.stringify({ message }),
             });
-            if (!response.ok) {
-                throw new Error('Network response was not ok');
-            }
             const data = await response.json();
             if (data.error) {
                 throw new Error(data.details || data.error);
             }
-            alert(`Fact Check Result:\n${data.result}`);
+            if (data.response) {
+                addAiChatMessage('ai', data.response);
+                updateProgressBar(data.progress);
+                if (data.chatComplete) {
+                    setTimeout(() => {
+                        aiChatView.classList.add('hidden');
+                        homeView.classList.remove('hidden');
+                        alert('Value system assessment complete. Welcome to DisagreeWithMe!');
+                    }, 2000);
+                }
+            } else {
+                throw new Error('Received empty response from server');
+            }
         } catch (error) {
-            console.error('Error:', error);
-            alert(`Error during fact-checking: ${error.message}`);
+            handleError(error, 'AI chat');
         }
+    }
+}
+
+function addAiChatMessage(sender, message) {
+    const messageElement = document.createElement('div');
+    messageElement.classList.add('message', sender);
+
+    const senderElement = document.createElement('span');
+    senderElement.classList.add('sender', sender);
+
+    if (sender === 'you') {
+        senderElement.textContent = 'You:';
+    } else if (sender === 'ai') {
+        senderElement.textContent = 'AI:';
+    } else {
+        senderElement.textContent = 'System:';
+    }
+
+    messageElement.appendChild(senderElement);
+    messageElement.appendChild(document.createTextNode(' ' + message));
+
+    const aiChatMessages = document.getElementById('ai-chat-messages');
+    aiChatMessages.appendChild(messageElement);
+    aiChatMessages.scrollTop = aiChatMessages.scrollHeight;
+}
+
+aiSendMessageButton.addEventListener('click', sendAiMessage);
+aiMessageInput.addEventListener('keypress', (e) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault();
+        sendAiMessage();
     }
 });
 
-async function fetchNews() {
+function updateProgressBar(progress) {
+    progressBar.style.width = `${progress}%`;
+    progressBar.textContent = `${progress}%`;
+}
+
+async function signup(username, email, password) {
     try {
-        const response = await fetch('/api/news', {
+        const response = await fetch('/api/register', {
+            method: 'POST',
             headers: {
-                'x-auth-token': getToken()
-            }
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ username, email, password }),
         });
-        const articles = await response.json();
-        displayNews(articles);
+
+        if (!response.ok) {
+            const errorData = await response.json();
+            throw new Error(errorData.message || 'Registration failed');
+        }
+
+        const data = await response.json();
+        alert(data.message || 'Registration successful. Starting value system assessment...');
+        
+        // Automatically log in the user after successful registration
+        await login(email, password);
     } catch (error) {
-        console.error('Error fetching news:', error);
-        newsFeed.innerHTML = '<p>Error loading news. Please try again later.</p>';
+        handleError(error, 'signup');
     }
 }
 
-function displayNews(articles) {
-    newsFeed.innerHTML = '';
-    articles.forEach(article => {
-        const articleElement = document.createElement('div');
-        articleElement.classList.add('news-card');
-        articleElement.innerHTML = `
-            <img src="${article.urlToImage || '/placeholder-image.jpg'}" alt="${article.title}">
-            <h3>${article.title}</h3>
-            <p>${article.description}</p>
-        `;
-        articleElement.addEventListener('click', () => window.open(article.url, '_blank'));
-        newsFeed.appendChild(articleElement);
-    });
-}
-
-loginForm.addEventListener('submit', async (e) => {
-    e.preventDefault();
-    const email = loginForm.querySelector('input[type="email"]').value;
-    const password = loginForm.querySelector('input[type="password"]').value;
-
+async function login(email, password) {
     try {
         const response = await fetch('/api/login', {
             method: 'POST',
@@ -271,7 +223,8 @@ loginForm.addEventListener('submit', async (e) => {
         });
 
         if (!response.ok) {
-            throw new Error('Login failed');
+            const errorData = await response.json();
+            throw new Error(errorData.message || 'Login failed');
         }
 
         const data = await response.json();
@@ -279,86 +232,86 @@ loginForm.addEventListener('submit', async (e) => {
         localStorage.setItem('token', data.token);
         localStorage.setItem('userId', data.userId);
         localStorage.setItem('username', data.username);
-
-        if (data.valueIdentificationCompleted) {
-            showHomeView();
+        
+        if (data.isNewUser) {
+            startValueSystemAssessment();
         } else {
-            startValueIdentification();
+            updateUIAuthentication();
         }
     } catch (error) {
-        console.error('Login error:', error);
-        alert('Login failed. Please check your credentials and try again.');
+        handleError(error, 'login');
     }
-});
+}
+
+function startValueSystemAssessment() {
+    authView.classList.add('hidden');
+    aiChatView.classList.remove('hidden');
+    addAiChatMessage('ai', "Welcome! I'm here to understand your value system. Let's start with a simple question: What's the most important issue facing the world today?");
+}
+
+function updateUIAuthentication() {
+    if (isAuthenticated()) {
+        authView.classList.add('hidden');
+        homeView.classList.remove('hidden');
+        chatView.classList.add('hidden');
+        aiChatView.classList.add('hidden');
+        logoutButton.classList.remove('hidden');
+        fetchLatestNews();
+    } else {
+        authView.classList.remove('hidden');
+        homeView.classList.add('hidden');
+        chatView.classList.add('hidden');
+        aiChatView.classList.add('hidden');
+        logoutButton.classList.add('hidden');
+    }
+}
+
+async function fetchLatestNews() {
+    try {
+        const response = await fetchWithAuth('/api/news');
+        const news = await response.json();
+        displayNews(news);
+    } catch (error) {
+        console.error('Error fetching news:', error);
+    }
+}
+
+function displayNews(news) {
+    const newsContainer = document.getElementById('news-container');
+    newsContainer.innerHTML = '';
+    news.forEach(article => {
+        const articleElement = document.createElement('div');
+        articleElement.classList.add('news-article');
+        articleElement.innerHTML = `
+            <h3>${article.title}</h3>
+            <p>${article.description}</p>
+            <a href="${article.url}" target="_blank">Read more</a>
+        `;
+        newsContainer.appendChild(articleElement);
+    });
+}
 
 signupForm.addEventListener('submit', async (e) => {
     e.preventDefault();
-    const name = signupForm.querySelector('input[name="name"]').value;
+    const username = signupForm.querySelector('input[type="text"]').value;
     const email = signupForm.querySelector('input[type="email"]').value;
     const password = signupForm.querySelector('input[type="password"]').value;
-
-    try {
-        const response = await fetch('/api/register', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({ name, email, password }),
-        });
-
-        if (!response.ok) {
-            throw new Error('Registration failed');
-        }
-
-        const data = await response.json();
-
-        localStorage.setItem('token', data.token);
-        localStorage.setItem('userId', data.userId);
-        localStorage.setItem('username', data.username);
-
-        startValueIdentification();
-    } catch (error) {
-        console.error('Signup error:', error);
-        alert('Registration failed. Please try again.');
-    }
+    await signup(username, email, password);
 });
 
-function showHomeView() {
-    authView.classList.add('hidden');
-    valueIdentificationView.classList.add('hidden');
-    homeView.classList.remove('hidden');
-    fetchUserData();
-}
-
-async function fetchUserData() {
-    try {
-        const response = await fetch('/api/user', {
-            headers: {
-                'x-auth-token': localStorage.getItem('token')
-            }
-        });
-
-        if (!response.ok) {
-            throw new Error('Failed to fetch user data');
-        }
-
-        const userData = await response.json();
-        updateDashboard(userData.identifiedValues);
-    } catch (error) {
-        console.error('Error fetching user data:', error);
-        alert('Failed to load user data. Please try logging in again.');
-        logout();
-    }
-}
+loginForm.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const email = loginForm.querySelector('input[type="email"]').value;
+    const password = loginForm.querySelector('input[type="password"]').value;
+    await login(email, password);
+});
 
 function logout() {
     localStorage.removeItem('token');
     localStorage.removeItem('userId');
     localStorage.removeItem('username');
-    authView.classList.remove('hidden');
-    homeView.classList.add('hidden');
-    chatView.classList.add('hidden');
-    valueIdentificationView.classList.add('hidden');
+    updateUIAuthentication();
+    socket.disconnect();
 }
 
 logoutButton.addEventListener('click', logout);
@@ -371,38 +324,70 @@ function getToken() {
     return localStorage.getItem('token');
 }
 
-// Initialize the application
-async function initApp() {
-    if (isAuthenticated()) {
-        try {
-            const response = await fetch('/api/user', {
-                headers: {
-                    'x-auth-token': localStorage.getItem('token')
-                }
-            });
-            
-            if (!response.ok) {
-                throw new Error('Failed to fetch user data');
-            }
-
-            const user = await response.json();
-            if (user.valueIdentificationCompleted) {
-                showHomeView();
-            } else {
-                startValueIdentification();
-            }
-        } catch (error) {
-            console.error('Error initializing app:', error);
-            logout();
-        }
-    } else {
-        authView.classList.remove('hidden');
+async function fetchWithAuth(url, options = {}) {
+    const token = getToken();
+    if (token) {
+        options.headers = {
+            ...options.headers,
+            'x-auth-token': token
+        };
     }
-    createTopics();
-    fetchNews();
+
+    try {
+        const response = await fetch(url, options);
+        if (!response.ok) {
+            if (response.status === 401) {
+                // Token might be expired, try to refresh
+                await refreshToken();
+                // Retry the request with the new token
+                return fetchWithAuth(url, options);
+            }
+            throw new Error('Network response was not ok');
+        }
+        return response;
+    } catch (error) {
+        handleError(error, 'server communication');
+        throw error;
+    }
 }
 
-// Socket event handlers
+function handleError(error, context) {
+    console.error(`Error in ${context}:`, error);
+    alert(`An error occurred during ${context}: ${error.message}`);
+}
+
+async function refreshToken() {
+    try {
+        const response = await fetch('/api/refresh-token', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'x-auth-token': getToken()
+            }
+        });
+
+        if (!response.ok) {
+            throw new Error('Failed to refresh token');
+        }
+
+        const data = await response.json();
+        localStorage.setItem('token', data.token);
+    } catch (error) {
+        console.error('Error refreshing token:', error);
+        logout();
+    }
+}
+
+setInterval(refreshToken, 50 * 60 * 1000);
+
+document.addEventListener('DOMContentLoaded', () => {
+    updateUIAuthentication();
+    createTopics();
+    if (isAuthenticated()) {
+        fetchLatestNews();
+    }
+});
+
 socket.on('connect', () => {
     console.log('Connected to server');
 });
@@ -422,13 +407,6 @@ socket.on('connect_error', (error) => {
 socket.on('match found', (data) => {
     currentRoom = data.room;
     addChatMessage('system', `Match found! Prepare to enlighten your opponent about ${data.topic}. Remember, the louder you type, the more correct you are!`);
-
-    // Send the opening statement
-    const openingStatement = openingStatementTextarea.value.trim();
-    if (openingStatement) {
-        socket.emit('send message', { room: currentRoom, message: openingStatement });
-        addChatMessage('you', openingStatement);
-    }
 });
 
 socket.on('new message', (message) => {
@@ -439,6 +417,3 @@ socket.on('user reported', () => {
     addChatMessage('system', "Your chat partner has been sent to argue with a wall. You win by default!");
     currentRoom = null;
 });
-
-// Call initApp when the DOM is fully loaded
-document.addEventListener('DOMContentLoaded', initApp);
