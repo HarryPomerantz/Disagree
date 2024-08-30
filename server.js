@@ -88,6 +88,7 @@ app.post('/api/register', async (req, res) => {
         });
 
         await user.save();
+console.log ("User Saved ", user)
 
         const token = jwt.sign({ userId: user._id }, process.env.JWT_SECRET, { expiresIn: '1h' });
         res.status(201).json({ 
