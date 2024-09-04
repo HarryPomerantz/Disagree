@@ -249,6 +249,43 @@ function startValueSystemAssessment() {
     addAiChatMessage('ai', "Welcome! I'm here to understand your value system. Let's start with a simple question: What's the most important issue facing the world today?");
 }
 
+async function sendAiMessage() {
+    const message = aiMessageInput.value.trim();
+    if (message) {
+        addAiChatMessage('you', message);
+        aiMessageInput.value = '';
+
+        try {
+            const response = await fetchWithAuth('/ai-chat', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ message }),
+            });
+            const data = await response.json();
+            if (data.error) {
+                throw new Error(data.details || data.error);
+            }
+            if (data.response) {
+                addAiChatMessage('ai', data.response);
+                updateProgressBar(data.progress);
+                if (data.chatComplete) {
+                    setTimeout(() => {
+                        aiChatView.classList.add('hidden');
+                        updateUIAuthentication();
+                        alert('Value system assessment complete. Welcome to DisagreeWithMe!');
+                    }, 2000);
+                }
+            } else {
+                throw new Error('Received empty response from server');
+            }
+        } catch (error) {
+            handleError(error, 'AI chat');
+        }
+    }
+}
+
 function updateUIAuthentication() {
     if (isAuthenticated()) {
         authView.classList.add('hidden');
@@ -381,11 +418,29 @@ async function refreshToken() {
 setInterval(refreshToken, 50 * 60 * 1000);
 
 document.addEventListener('DOMContentLoaded', () => {
-    updateUIAuthentication();
-    createTopics();
-    if (isAuthenticated()) {
-        fetchLatestNews();
+    const token = localStorage.getItem('token');
+    if (token) {
+        fetch('/api/check-new-user', {
+            headers: {
+                'x-auth-token': token
+            }
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.isNewUser) {
+                startValueSystemAssessment();
+            } else {
+                updateUIAuthentication();
+            }
+        })
+        .catch(error => {
+            console.error('Error checking user status:', error);
+            updateUIAuthentication();
+        });
+    } else {
+        updateUIAuthentication();
     }
+    createTopics();
 });
 
 socket.on('connect', () => {

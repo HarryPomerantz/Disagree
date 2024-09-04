@@ -176,6 +176,16 @@ async function generateAIResponse(message, user) {
     }
 }
 
+app.get('/api/check-new-user', authMiddleware, async (req, res) => {
+    try {
+        const user = await User.findById(req.user);
+        res.json({ isNewUser: user.isNewUser });
+    } catch (error) {
+        console.error('Error checking user status:', error);
+        res.status(500).json({ message: 'Server error' });
+    }
+});
+
 app.get('/api/news', authMiddleware, async (req, res) => {
     try {
         const response = await axios.get(`https://newsapi.org/v2/top-headlines?country=us&apiKey=${process.env.NEWS_API_KEY}`);

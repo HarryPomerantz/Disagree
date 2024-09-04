@@ -10,7 +10,8 @@
     <div id="app">
         <header>
             <h1 id="home-link">DisagreeWithMe<span class="dot-org">.org</span></h1>
-            <p class="tagline">"One Must Imagine Sisyphus Arguing with the Rock" - Albert Camus</p>
+            <p class="tagline">One Must Imagine Sisyphus Arguing with the Rock - Albert Camus</p>
+            <button id="logout-button" class="hidden">Logout</button>
         </header>
 
         <div id="auth-view" class="view">
@@ -37,24 +38,20 @@
         </div>
 
         <div id="home-view" class="view hidden">
-            <button id="logout-button">Logout</button>
-
             <div class="content-wrapper">
                 <div class="main-column">
-                    <div class="topic-container">
+                    <div class="box-container topic-container">
                         <h2>Choose a Topic</h2>
                         <div id="topic-bubbles"></div>
                         <button id="find-match" class="btn primary-btn" disabled>Find Someone to Enlighten</button>
                     </div>
-
-                    <div class="upgrade-value-system">
+                    <div class="box-container upgrade-value-system">
                         <h2>Upgrade Your Value System</h2>
                         <button id="start-assessment" class="btn primary-btn">Start Assessment</button>
                     </div>
                 </div>
-
                 <div class="side-column">
-                    <div class="news-container">
+                    <div class="box-container news-container">
                         <h2>Latest News</h2>
                         <div id="news-container"></div>
                     </div>
